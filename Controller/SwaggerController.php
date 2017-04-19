@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Copyright 2007 Xpreso Software Ltd
+ * Copyright 2017 Xpreso Software Ltd
  * @Author Pablo Santiago Sanchez <psanchez@xpreso.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
