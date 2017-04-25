@@ -49,7 +49,7 @@ abstract class SwaggerGenerator
 
     static public function getSwaggerPaths()
     {
-        $routesInfo = [];
+        $routesInfo  = [];
         $definitions = [];
         foreach (self::$routes as $route) {
             $url = $route->uri();
@@ -66,7 +66,7 @@ abstract class SwaggerGenerator
 
     static public function processMethodAndAction($route, &$definitions, &$url)
     {
-        $methods = $route->methods();
+        $methods         = $route->methods();
         $actionSignature = self::getActionSignature($route->getActionName(), $definitions, $url);
 
         $signature = [];
@@ -87,32 +87,48 @@ abstract class SwaggerGenerator
 
         $ref = new \ReflectionClass($data[0]);
 
-        $tagData = explode('\\',$data[0]);
+        $tagData = explode('\\', $data[0]);
 
         if (isset($data[1]) && $data[1]) {
-            $method = $ref->getMethod($data[1]);
+            $method     = $ref->getMethod($data[1]);
             $parameters = $method->getParameters();
             $returnType = $method->getReturnType();
-            $return = self::filterReturn($returnType);
+            $return     = self::filterClass($returnType);
             /** @var \ReflectionParameter $parameter */
-            $signature['summary'] = $method->getDocComment() ?
+            $signature['summary']     = $method->getDocComment() ?
                 trim(str_replace(['/**', ' * ', '*/', "\n"], '', $method->getDocComment())) :
                 'No documentation available';
             $signature['description'] = $method->getDocComment() ?
                 trim(str_replace(['/**', ' * ', '*/', "\n"], '', $method->getDocComment())) :
                 'No documentation available';
-            $signature['tags'] = [lcfirst($tagData[0])]; //[lcfirst(str_replace('Controller', '', $tagData[0].ucfirst($tagData[count($tagData) -1])))];
-            $signature['operationId'] = str_replace('Controller','', lcfirst($tagData[count($tagData) -1])).ucFirst(($data[1] == 'index') ? 'get' : $data[1]);
-            $signature['parameters'] = [];
+            $signature['tags']        = [lcfirst($tagData[0])]; //[lcfirst(str_replace('Controller', '', $tagData[0].ucfirst($tagData[count($tagData) -1])))];
+            $signature['operationId'] = str_replace('Controller', '', lcfirst($tagData[count($tagData) - 1])) . ucFirst(($data[1] == 'index') ? 'get' : $data[1]);
+            $signature['parameters']  = [];
+
             foreach ($parameters as $parameter) {
-                $signature['parameters'][] = [
-                    'name' => $parameter->getName(),
-                    'in' => strstr($url, '{'.$parameter->getName().'}') ? 'path' : 'query',
-                    'description' => $parameter->getName(),
-                    'required' => true,
-                    'type' => 'string'
-                ];
+                if ($parameter->getClass()) {
+                    $class = $parameter->getType()->__toString();
+                    $definitions[$class] = self::filterClass($class);
+                    $signature['parameters'][] = [
+                        'name' => $parameter->getName(),
+                        'description' => $parameter->getName(),
+                        'in' => 'body',
+                        'required' => true,
+                        'schema' => [
+                            '$ref' => '#/definitions/' . str_replace('\\', '_', self::getParameterType($parameter))
+                        ]
+                    ];
+                } else {
+                    $signature['parameters'][] = [
+                        'name' => $parameter->getName(),
+                        'description' => $parameter->getName(),
+                        'in' => strstr($url, '{' . $parameter->getName() . '}') ? 'path' : 'query',
+                        'required' => true,
+                        'type' => $type = self::getParameterType($parameter)
+                    ];
+                }
             }
+
             $signature['responses'] = [
                 'default' => [
                     'description' => 'Response should be ' . $return,
@@ -129,11 +145,11 @@ abstract class SwaggerGenerator
             }
 
         } else {
-            $signature['summary'] = 'Closures have no documentation';
+            $signature['summary']     = 'Closures have no documentation';
             $signature['description'] = 'Closures have no documentation';
-            $signature['tags'] = ['closure'];
-            $signature['responses'] = 'string';
-            $signature['responses'] = [
+            $signature['tags']        = ['closure'];
+            $signature['responses']   = 'string';
+            $signature['responses']   = [
                 'default' => [
                     'description' => 'Can\'t guess return from Closures',
                     'schema' => [
@@ -141,13 +157,13 @@ abstract class SwaggerGenerator
                     ]
                 ]
             ];
-            $definitions['Mixed'] = 'Mixed';
+            $definitions['Mixed']     = 'Mixed';
         }
 
         return $signature;
     }
 
-    static public function filterReturn($returnType)
+    static public function filterClass($returnType)
     {
         $returnType = ($returnType instanceof \ReflectionType) ? $returnType->__toString() : $returnType;
 
@@ -261,26 +277,12 @@ abstract class SwaggerGenerator
             /**
              * check if property is a class or a primitive
              */
-            $methodName = 'set'.ucfirst($prop->getName());
-            $method = $ref->getMethod($methodName);
-            $params = $method->getParameters();
-            $type = 'string';
+            $methodName = 'set' . ucfirst($prop->getName());
+            $method     = $ref->getMethod($methodName);
+            $params     = $method->getParameters();
+            $type       = 'string';
             if (isset($params[0]) && $params[0]->getType()) {
-                $type = $params[0]->getType()->__toString();
-                switch ($type) {
-                    case 'bool':
-                        $type = 'boolean';
-                        break;
-                    case 'int':
-                        $type = 'integer';
-                        break;
-                    case 'float':
-                        $type = 'number';
-                        break;
-                    case 'DateTime':
-                        $type = 'object';
-                        break;
-                }
+                $type = self::getParameterType($params[0]);
             }
             $classDefinition['properties'][$prop->getName()] = [
                 'type' => $type,
@@ -293,13 +295,44 @@ abstract class SwaggerGenerator
         return $classDefinition;
     }
 
+    /**
+     * Simple replacement for swagger types
+     * @param $parameter
+     * @return string
+     */
+    static public function getParameterType($parameter)
+    {
+        if (!$parameter->getType()) {
+            $type = 'string';
+        } else {
+            $type = $parameter->getType()->__toString();
+
+            switch ($type) {
+                case 'bool':
+                    $type = 'boolean';
+                    break;
+                case 'int':
+                    $type = 'integer';
+                    break;
+                case 'float':
+                    $type = 'number';
+                    break;
+                case 'DateTime':
+                    $type = 'object';
+                    break;
+            }
+        }
+
+        return $type;
+    }
+
     static public function prepareOutput($routesInfo, $definitions)
     {
         $template = file_get_contents(self::$templatePath);
-        $yaml = Yaml::parse($template);
+        $yaml     = Yaml::parse($template);
 
-        $yaml['host'] = str_replace(['http://', 'https://'], '', strtolower(config('app.url')));
-        $yaml['paths'] = $routesInfo;
+        $yaml['host']        = str_replace(['http://', 'https://'], '', strtolower(config('app.url')));
+        $yaml['paths']       = $routesInfo;
         $yaml['definitions'] = $definitions;
 
         return $yaml = Yaml::dump($yaml, 10, 2);
