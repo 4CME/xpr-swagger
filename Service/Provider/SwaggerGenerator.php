@@ -267,6 +267,20 @@ abstract class SwaggerGenerator
             $type = 'string';
             if (isset($params[0]) && $params[0]->getType()) {
                 $type = $params[0]->getType()->__toString();
+                switch ($type) {
+                    case 'bool':
+                        $type = 'boolean';
+                        break;
+                    case 'int':
+                        $type = 'integer';
+                        break;
+                    case 'float':
+                        $type = 'number';
+                        break;
+                    case 'DateTime':
+                        $type = 'object';
+                        break;
+                }
             }
             $classDefinition['properties'][$prop->getName()] = [
                 'type' => $type,
