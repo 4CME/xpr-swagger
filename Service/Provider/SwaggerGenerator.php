@@ -278,18 +278,20 @@ abstract class SwaggerGenerator
              * check if property is a class or a primitive
              */
             $methodName = 'set' . ucfirst($prop->getName());
-            $method     = $ref->getMethod($methodName);
-            $params     = $method->getParameters();
-            $type       = 'string';
-            if (isset($params[0]) && $params[0]->getType()) {
-                $type = self::getParameterType($params[0]);
+            if (method_exists($className, $methodName)) {
+                $method = $ref->getMethod($methodName);
+                $params = $method->getParameters();
+                $type   = 'string';
+                if (isset($params[0]) && $params[0]->getType()) {
+                    $type = self::getParameterType($params[0]);
+                }
+                $classDefinition['properties'][$prop->getName()] = [
+                    'type' => $type,
+                    'description' => $prop->getDocComment() ?
+                        trim(str_replace(['/**', ' * ', '*/', "\n"], '', $prop->getDocComment())) :
+                        'No documentation available'
+                ];
             }
-            $classDefinition['properties'][$prop->getName()] = [
-                'type' => $type,
-                'description' => $prop->getDocComment() ?
-                    trim(str_replace(['/**', ' * ', '*/', "\n"], '', $prop->getDocComment())) :
-                    'No documentation available'
-            ];
         }
 
         return $classDefinition;
