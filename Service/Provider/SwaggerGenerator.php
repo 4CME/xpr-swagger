@@ -56,7 +56,10 @@ abstract class SwaggerGenerator
             if (strpos($url, '/') !== 0) {
                 $url = '/' . $url;
             }
-            $routesInfo[$url] = self::processMethodAndAction($route, $definitions, $url);
+            $result  = self::processMethodAndAction($route, $definitions, $url);
+            if ($result) {
+                $routesInfo[$url] = $result;
+            }
         }
 
         $definitions = self::prepareDefinitions($definitions);
@@ -68,6 +71,9 @@ abstract class SwaggerGenerator
     {
         $methods         = $route->methods();
         $actionSignature = self::getActionSignature($route->getActionName(), $definitions, $url);
+        if (!$actionSignature) {
+            return false;
+        }
 
         $signature = [];
         foreach ($methods as $method) {
@@ -89,7 +95,7 @@ abstract class SwaggerGenerator
 
         $tagData = explode('\\', $data[0]);
 
-        if (isset($data[1]) && $data[1]) {
+        if (isset($data[1]) && $data[1] && method_exists($data[0], $data[1])) {
             $method     = $ref->getMethod($data[1]);
             $parameters = $method->getParameters();
             $returnType = $method->getReturnType();
@@ -278,7 +284,8 @@ abstract class SwaggerGenerator
              * check if property is a class or a primitive
              */
             $methodName = 'set' . ucfirst($prop->getName());
-            if (method_exists($className, $methodName)) {
+            $methodName2 = 'Get' . ucfirst($prop->getName());
+            if (method_exists($className, $methodName) && method_exists($className, $methodName2)) {
                 $method = $ref->getMethod($methodName);
                 $params = $method->getParameters();
                 $type   = 'string';
